@@ -102,7 +102,47 @@ static int dirent_compare(const void *a, const void *b)
 /// @param flags output control flags (F_*)
 void processDir(const char *dn, unsigned int depth, struct summary *stats, unsigned int flags)
 {
-  // TODO
+  DIR *dir;
+  struct dirent *entry;
+  struct dirent **names;
+  int n, i;
+  char path[PATH_MAX];
+
+  // open directory
+  dir = opendir(dn);
+  if (!dir) {
+    fprintf(stderr, "ERROR: %s\n", strerror(errno));
+    return;
+  }
+
+  // count entries
+  n = 0;
+  while (getNext(dir)) n++;
+  rewinddir(dir);
+
+  // sort entries
+  names = malloc(n * sizeof(struct dirent *));
+  for (i = 0; i < n; i++) names[i] = getNext(dir);
+  qsort(names, n, sizeof(struct dirent *), dirent_compare);
+
+  // print entries  
+  for (i = 0; i < n; i++) {
+    // indent according to depth
+    for (int j = 0; j < depth; j++) printf("  ");
+
+    printf("%s\n", names[i]->d_name);
+
+    // recursively process subdirectories
+    if (names[i]->d_type == DT_DIR) {
+      snprintf(path, sizeof(path), "%s/%s", dn, names[i]->d_name);
+      processDir(path, depth + 1, stats, flags);
+    }
+
+    free(names[i]);
+  }
+  free(names);
+
+  closedir(dir);
 }
 
 
@@ -193,7 +233,35 @@ int main(int argc, char *argv[])
   //   - call processDir() for the directory
   //   - if F_SUMMARY flag set: print summary & update statistics
   memset(&tstat, 0, sizeof(tstat));
-  //...
+
+for (int i = 0; i < ndir; i++) {
+  struct summary dstat = {0};
+
+  if (flags & F_SUMMARY) {
+    printf("Name\n");
+    printf("----------------------------------------------------------------------------------------------------\n");
+  }
+
+  printf("%s\n", directories[i]);
+  processDir(directories[i], 1, &dstat, flags);
+
+  if (flags & F_SUMMARY) {
+    printf("----------------------------------------------------------------------------------------------------\n");
+    printf("%d file%s, %d director%s, %d link%s, %d pipe%s, and %d socket%s\n\n", 
+      dstat.files, (dstat.files == 1) ? "" : "s",
+      dstat.dirs, (dstat.dirs == 1) ? "y" : "ies",
+      dstat.links, (dstat.links == 1) ? "" : "s",
+      dstat.fifos, (dstat.fifos == 1) ? "" : "s",
+      dstat.socks, (dstat.socks == 1) ? "" : "s");
+    
+    tstat.dirs += dstat.dirs;
+    tstat.files += dstat.files;
+    tstat.links += dstat.links;
+    tstat.fifos += dstat.fifos;
+    tstat.socks += dstat.socks;
+    tstat.size += dstat.size;
+  }
+}
 
 
   //
